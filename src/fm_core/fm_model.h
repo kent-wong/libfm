@@ -47,6 +47,12 @@ class fm_model {
   DVectorDouble w;
   DMatrixDouble v;
 
+#ifdef ENABLE_MPI
+  double w0_grad;
+  DVectorDouble w_grad;
+  DMatrixDouble v_grad;
+#endif
+
   // the following values should be set:
   uint num_attribute;
 
@@ -96,6 +102,14 @@ void fm_model::init() {
   v.init(init_mean, init_stdev);
   m_sum.setSize(num_factor);
   m_sum_sqr.setSize(num_factor);
+
+#ifdef ENABLE_MPI
+  w0_grad = 0;
+  w_grad.setSize(num_attribute);
+  v_grad.setSize(num_factor, num_attribute);
+  w_grad.init(0);
+  v_grad.init(0);
+#endif
 }
 
 double fm_model::predict(sparse_row<FM_FLOAT>& x) {
