@@ -9,10 +9,10 @@ all: libFM transpose convert
 
 libFM: libfm.o
 	mkdir -p $(BIN_DIR)
-	g++ -O3 -Wall libfm.o -o $(BIN_DIR)libFM
+	mpic++ -O3 -Wall libfm.o -o $(BIN_DIR)libFM
 
 %.o: %.cpp
-	g++ -O3 -Wall -c $< -o $@
+	mpic++ -DENABLE_MPI -O3 -Wall -c $< -o $@
 
 clean:	clean_lib
 	mkdir -p $(BIN_DIR)
@@ -24,9 +24,9 @@ clean_lib:
 
 transpose: tools/transpose.o
 	mkdir -p $(BIN_DIR)
-	g++ -O3 tools/transpose.o -o $(BIN_DIR)transpose
+	mpic++ -O3 tools/transpose.o -o $(BIN_DIR)transpose
 
 convert: tools/convert.o
 	mkdir -p $(BIN_DIR)
-	g++ -O3 tools/convert.o -o $(BIN_DIR)convert
+	mpic++ -O3 tools/convert.o -o $(BIN_DIR)convert
 
