@@ -32,6 +32,11 @@
 
 #include "fm_data.h"
 
+#ifdef ENABLE_MPI
+#include <mpi.h>
+#include <string.h>
+#define MPI_SERVER_NODE	0
+#endif
 
 class fm_model {
  public:
@@ -43,15 +48,21 @@ class fm_model {
   void saveModel(std::string model_file_path);
   int loadModel(std::string model_file_path);
 
-  double w0;
-  DVectorDouble w;
-  DMatrixDouble v;
-
 #ifdef ENABLE_MPI
+  void init_mpi();
+  int worker_push();
+  int worker_pull();
+
+  int my_rank;
+  int world_size;
   double w0_grad;
   DVectorDouble w_grad;
   DMatrixDouble v_grad;
 #endif
+
+  double w0;
+  DVectorDouble w;
+  DMatrixDouble v;
 
   // the following values should be set:
   uint num_attribute;
@@ -108,7 +119,8 @@ void fm_model::init() {
   w_grad.setSize(num_attribute);
   v_grad.setSize(num_factor, num_attribute);
   w_grad.init(0);
-  v_grad.init(0);
+  v_grad.DMatrix<double>::init(0);
+  void init_mpi();
 #endif
 }
 
@@ -217,5 +229,55 @@ void fm_model::splitString(const std::string& s, char c, std::vector<std::string
       v.push_back(s.substr(i, s.length()));
   }
 }
+
+#ifdef ENABLE_MPI
+void fm_model::init_mpi() {
+	MPI_Init(NULL, NULL);
+	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+}
+
+int fm_model::worker_push() {
+	if (my_rank == MPI_SERVER_NODE) // 只有worker进程上才累积梯度
+		return 0;
+	
+	// 打包梯度并发送给ROOT进程
+	// pack the gradients
+	int count = v_grad.dim1*v_grad.dim2 + w_grad.dim + 1;
+	double *grads = new double[count];
+	grads[0] = w0_grad;
+	memcpy(&grads[1], w_grad.value, w_grad.dim);
+	memcpy(&grads[1+w_grad.dim], v_grad.value[0], v_grad.dim1*v_grad.dim2);
+
+	return MPI_Send(grads, count, MPI_DOUBLE, MPI_SERVER_NODE, 0, MPI_COMM_WORLD);
+}
+
+int fm_model::worker_pull() {
+	if (my_rank == MPI_SERVER_NODE)
+		return 0;
+	
+	int count = v.dim1*v.dim2 + w.dim + 1;
+	double *weights = new double[count];
+	MPI_Status status;
+
+	// 接收ROOT进程发送的weights
+	int result = MPI_Recv(weights, count, MPI_DOUBLE, MPI_SERVER_NODE, 0, MPI_COMM_WORLD, &status);
+	if (result == MPI_SUCCESS) {
+					int r_count = 0;
+					MPI_Get_count(&status, MPI_DOUBLE, &r_count);
+					if (r_count != count)
+									throw "received weights insufficent!";
+					w0 = weights[0];
+					memcpy(w.value, &weights[1], w.dim);
+					memcpy(v.value[0], &weights[1+w.dim], v.dim1*v.dim2);
+	}
+	else {
+		throw "MPI_Recv() failed!";
+	}
+
+
+	return 0;
+}
+#endif
 
 #endif /*FM_MODEL_H_*/
