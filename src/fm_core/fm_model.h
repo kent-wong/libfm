@@ -52,6 +52,9 @@ class fm_model {
   void init_mpi();
   int worker_push();
   int worker_pull();
+  int server_push();
+  int server_pull();
+  int server_learn(int learn_rate);
 
   int my_rank;
   int world_size;
@@ -258,23 +261,92 @@ int fm_model::worker_pull() {
 	
 	int count = v.dim1*v.dim2 + w.dim + 1;
 	double *weights = new double[count];
-	MPI_Status status;
 
 	// 接收ROOT进程发送的weights
-	int result = MPI_Recv(weights, count, MPI_DOUBLE, MPI_SERVER_NODE, 0, MPI_COMM_WORLD, &status);
+	int result = MPI_Bcast(weights, count, MPI_DOUBLE, MPI_SERVER_NODE, MPI_COMM_WORLD);
 	if (result == MPI_SUCCESS) {
-					int r_count = 0;
-					MPI_Get_count(&status, MPI_DOUBLE, &r_count);
-					if (r_count != count)
-									throw "received weights insufficent!";
-					w0 = weights[0];
-					memcpy(w.value, &weights[1], w.dim);
-					memcpy(v.value[0], &weights[1+w.dim], v.dim1*v.dim2);
+		w0 = weights[0];
+		memcpy(w.value, &weights[1], w.dim);
+		memcpy(v.value[0], &weights[1+w.dim], v.dim1*v.dim2);
 	}
 	else {
-		throw "MPI_Recv() failed!";
+		throw "worker: MPI_Bcast() failed!";
 	}
 
+	return 0;
+}
+
+int fm_model::server_push() {
+	if (my_rank != MPI_SERVER_NODE)
+		return 0;
+
+	int count = v.dim1*v.dim2 + w.dim + 1;
+	double *weights = new double[count];
+	weights[0] = w0;
+	memcpy(&weights[1], w.value, w.dim);
+	memcpy(&weights[1+w.dim], v.value[0], v.dim1*v.dim2);
+
+	return MPI_Bcast(weights, count, MPI_DOUBLE, MPI_SERVER_NODE, MPI_COMM_WORLD);
+}
+
+int fm_model::server_pull() {
+	if (my_rank != MPI_SERVER_NODE)
+		return 0;
+
+	int count = v_grad.dim1*v_grad.dim2 + w_grad.dim + 1;
+	double *grads = new double[count];
+	MPI_Status status;
+	int result = MPI_Recv(grads, count, MPI_DOUBLE, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+	if (result == MPI_SUCCESS) {
+		int r_count = 0;
+		MPI_Get_count(&status, MPI_DOUBLE, &r_count);
+		if (r_count != count)
+			throw "server: received insufficient grads!";
+		else {
+			w0_grad += grads[0];
+			for (uint i = 0; i < w_grad.dim; i++) {
+				double& ww = w_grad(i);
+				ww += grads[1+i];
+			}
+			for (uint f = 0; f < v_grad.dim1; f++) {
+				for (uint i = 0; i < v_grad.dim2; i++) {
+					double& vv = v_grad(f, i);
+					vv += grads[1+w_grad.dim+f*v_grad.dim1+v_grad.dim2];
+				}
+			}
+		}
+	}
+	else {
+		throw "server: MPI_Recv() failed!";
+	}
+	
+	return 0;
+}
+
+int fm_model::server_learn(int learn_rate) {
+	if (my_rank != MPI_SERVER_NODE)
+		return 0;
+
+	if (k0) {
+		w0 -= learn_rate * (w0_grad + reg0 * w0);
+		w0_grad = 0;
+	}
+
+	if (k1) {
+		for (uint i = 0; i < w.dim; i++) {
+			double& ww = w(i);
+			ww -= learn_rate * (w_grad(i) + regw * ww);
+		}
+		w_grad.init(0);
+	}
+
+	for (uint f = 0; f < v.dim1; f++) {
+		for (uint i = 0; i < v.dim2; i++) {
+			double& vv = v(f, i);
+			vv -= learn_rate * (v_grad(f, i) + regv * vv);
+		}
+	}
+	v_grad.DMatrix<double>::init(0);
 
 	return 0;
 }
