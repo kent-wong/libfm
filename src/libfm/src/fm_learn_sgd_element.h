@@ -46,6 +46,10 @@ void fm_learn_sgd_element::init() {
 }
 
 void fm_learn_sgd_element::learn(Data& train, Data& test) {
+	// wk_debug
+	std::cout << "*** fm_learn_sgd_element::learn() ***" << std::endl;
+	std::cout << "*** num_iter: " << num_iter << " ***" << std::endl;
+
   fm_learn_sgd::learn(train, test);
 
   std::cout << "SGD: DON'T FORGET TO SHUFFLE THE ROWS IN TRAINING DATA TO GET THE BEST RESULTS." << std::endl;
