@@ -252,7 +252,12 @@ int fm_model::worker_push() {
 	memcpy(&grads[1], w_grad.value, w_grad.dim);
 	memcpy(&grads[1+w_grad.dim], v_grad.value[0], v_grad.dim1*v_grad.dim2);
 
-	return MPI_Send(grads, count, MPI_DOUBLE, MPI_SERVER_NODE, 0, MPI_COMM_WORLD);
+	int result = MPI_Send(grads, count, MPI_DOUBLE, MPI_SERVER_NODE, 0, MPI_COMM_WORLD);
+	w0_grad = 0;
+	w_grad.init(0);
+	v_grad.DMatrix<double>::init(0);
+
+	return result;
 }
 
 int fm_model::worker_pull() {
