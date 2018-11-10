@@ -376,6 +376,12 @@ int fm_model::server_pull() {
 	MPI_Status status;
 	int result = MPI_Recv(grads, count, MPI_DOUBLE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
 	if (result == MPI_SUCCESS) {
+		std::cout << "===============:" << std::endl;
+		for (int i = 0; i < count; i ++ ) {
+			std::cout << grads[i] << " ";
+		}
+		std::cout << "----------" << std::endl;
+
 		int r_count = 0;
 		MPI_Get_count(&status, MPI_DOUBLE, &r_count);
 		std::cout << "*** server received " << r_count << " grads from " << status.MPI_SOURCE << std::endl;
@@ -390,7 +396,7 @@ int fm_model::server_pull() {
 			for (uint f = 0; f < v_grad.dim1; f++) {
 				for (uint i = 0; i < v_grad.dim2; i++) {
 					double& vv = v_grad(f, i);
-					vv += grads[1+w_grad.dim+f*v_grad.dim1+v_grad.dim2];
+					vv += grads[1 + w_grad.dim + f*v_grad.dim2 + i];
 				}
 			}
 			
