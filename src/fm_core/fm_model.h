@@ -295,6 +295,7 @@ int fm_model::worker_pull() {
 
 	// 接收ROOT进程发送的weights
 	int result = MPI_Bcast(weights, count, MPI_DOUBLE, MPI_SERVER_NODE, MPI_COMM_WORLD);
+	//int result = MPI_Recv(weights, count, MPI_DOUBLE, MPI_SERVER_NODE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 	if (result == MPI_SUCCESS) {
 		w0 = weights[0];
 		memcpy(w.value, &weights[1], w.dim*sizeof(double));
@@ -363,6 +364,7 @@ int fm_model::server_push() {
 	memcpy(&weights[1+w.dim], v.value[0], v.dim1*v.dim2*sizeof(double));
 
 	return MPI_Bcast(weights, count, MPI_DOUBLE, MPI_SERVER_NODE, MPI_COMM_WORLD);
+	//return MPI_Send(weights, count, MPI_DOUBLE, target_node, 0, MPI_COMM_WORLD);
 }
 
 int fm_model::server_pull() {
@@ -376,30 +378,42 @@ int fm_model::server_pull() {
 	MPI_Status status;
 	int result = MPI_Recv(grads, count, MPI_DOUBLE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
 	if (result == MPI_SUCCESS) {
-		/* std::cout << "===============:" << std::endl;
-		for (int i = 0; i < count; i ++ ) {
-			std::cout << grads[i] << " ";
-		}
-		std::cout << "----------" << std::endl; */
-
 		int r_count = 0;
 		MPI_Get_count(&status, MPI_DOUBLE, &r_count);
 		//std::cout << "*** server received " << r_count << " grads from " << status.MPI_SOURCE << std::endl;
 		if (r_count != count)
 			throw "server: received insufficient grads!";
 		else {
-			w0_grad += grads[0];
+			double *grads_filtered = new double[count];
+			int worker_index = status.MPI_SOURCE - 1;
+			int segment = (int)(count / (world_size-1));
+			int start_index = segment * worker_index;
+			int end_index = start_index + segment;
+
+			if (status.MPI_SOURCE == (world_size-1))
+				end_index = count;
+
+			memset(grads_filtered, 0, count*sizeof(double));
+			memcpy(&grads_filtered[start_index], &grads[start_index], (end_index-start_index)*sizeof(double));
+
+			w0_grad += grads_filtered[0];
 			for (uint i = 0; i < w_grad.dim; i++) {
 				double& ww = w_grad(i);
-				ww += grads[1+i];
+				ww += grads_filtered[1+i];
 			}
 			for (uint f = 0; f < v_grad.dim1; f++) {
 				for (uint i = 0; i < v_grad.dim2; i++) {
 					double& vv = v_grad(f, i);
-					vv += grads[1 + w_grad.dim + f*v_grad.dim2 + i];
+					vv += grads_filtered[1 + w_grad.dim + f*v_grad.dim2 + i];
 				}
 			}
 			
+			/* std::cout << "worker: " << worker_index << " ===============:" << std::endl;
+			for (int i = 0; i < count; i ++ ) {
+				std::cout << grads_filtered[i] << " ";
+			}
+			std::cout << "----------" << std::endl; */
+
 			// wk_debug
 			//dump_grads();
 		}
@@ -408,14 +422,16 @@ int fm_model::server_pull() {
 		throw "server: MPI_Recv() failed!";
 	}
 	
-	return 0;
+	return status.MPI_SOURCE;
 }
 
 int fm_model::server_learn(double learn_rate) {
 	if (my_rank != MPI_SERVER_NODE)
 		return 0;
 
-	double divisor = 1.0/(world_size-1);
+	//double divisor = 1.0/(world_size-1);
+	double divisor = 1.0;
+
 	//std::cout << "Enter: fm_model::server_learn(" << learn_rate << ")" << std::endl;
 	//std::cout << "divisor: " << divisor << std::endl;
 

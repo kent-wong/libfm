@@ -73,6 +73,9 @@ void fm_learn_sgd_element::learn(Data& train, Data& test) {
 
 		server_time += MPI_Wtime();
 		std::cout << "***** Total training time on server: " << server_time << " seconds" << std::endl;
+		std::cout.flush();
+		MPI_Finalize();
+
 		return ;
 	}
 #endif
@@ -85,11 +88,18 @@ void fm_learn_sgd_element::learn(Data& train, Data& test) {
     int train_segment = (int)(train.num_cases / (fm->world_size-1));
     int start_index = train_segment * (fm->my_rank - 1);
     int end_index = start_index + train_segment;
+    std::cout << "start index: " << start_index << ", end index: " << end_index << std::endl;
+
 #endif
   for (int i = 0; i < num_iter; i++) {
     double iteration_time = getusertime();
 #ifdef ENABLE_MPI
-    for (train.data->set(start_index); train.data->cur() < end_index; train.data->next()) {
+    //for (train.data->set(start_index); train.data->cur() < end_index; train.data->next()) {
+	    //std::cout << "rand(): " << rand() << std::endl;
+    int counter = 0;
+    while (counter < train_segment) {
+	    counter ++;
+	    train.data->set(rand() % train.num_cases);
 #else
     for (train.data->begin(); !train.data->end(); train.data->next()) {
 #endif
@@ -115,8 +125,7 @@ void fm_learn_sgd_element::learn(Data& train, Data& test) {
       log->newLine();
     }
 #ifdef ENABLE_MPI
-	if (fm->my_rank != MPI_SERVER_NODE) {
-		// worker node
+	if (fm->my_rank != MPI_SERVER_NODE) { // worker node
 		fm->worker_push();	
 		fm->worker_pull();
 
