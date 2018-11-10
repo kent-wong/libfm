@@ -260,10 +260,10 @@ int fm_model::worker_push() {
 	if (my_rank == MPI_SERVER_NODE) // 只有worker进程上才累积梯度
 		return 0;
 
-	std::cout << "Enter: fm_model::worker_push()" << std::endl;
+	//std::cout << "Enter: fm_model::worker_push()" << std::endl;
 	
 	// wk_debug
-	dump_grads();
+	//dump_grads();
 
 	// 打包梯度并发送给ROOT进程
 	// pack the gradients
@@ -288,7 +288,7 @@ int fm_model::worker_pull() {
 	if (my_rank == MPI_SERVER_NODE)
 		return 0;
 	
-	std::cout << "Enter: fm_model::worker_pull()" << std::endl;
+	//std::cout << "Enter: fm_model::worker_pull()" << std::endl;
 
 	int count = v.dim1*v.dim2 + w.dim + 1;
 	double *weights = new double[count];
@@ -354,7 +354,7 @@ int fm_model::server_push() {
 	if (my_rank != MPI_SERVER_NODE)
 		return 0;
 
-	std::cout << "Enter: fm_model::server_push()" << std::endl;
+	//std::cout << "Enter: fm_model::server_push()" << std::endl;
 
 	int count = v.dim1*v.dim2 + w.dim + 1;
 	double *weights = new double[count];
@@ -369,22 +369,22 @@ int fm_model::server_pull() {
 	if (my_rank != MPI_SERVER_NODE)
 		return 0;
 
-	std::cout << "Enter: fm_model::server_pull()" << std::endl;
+	//std::cout << "Enter: fm_model::server_pull()" << std::endl;
 
 	int count = v_grad.dim1*v_grad.dim2 + w_grad.dim + 1;
 	double *grads = new double[count];
 	MPI_Status status;
 	int result = MPI_Recv(grads, count, MPI_DOUBLE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, &status);
 	if (result == MPI_SUCCESS) {
-		std::cout << "===============:" << std::endl;
+		/* std::cout << "===============:" << std::endl;
 		for (int i = 0; i < count; i ++ ) {
 			std::cout << grads[i] << " ";
 		}
-		std::cout << "----------" << std::endl;
+		std::cout << "----------" << std::endl; */
 
 		int r_count = 0;
 		MPI_Get_count(&status, MPI_DOUBLE, &r_count);
-		std::cout << "*** server received " << r_count << " grads from " << status.MPI_SOURCE << std::endl;
+		//std::cout << "*** server received " << r_count << " grads from " << status.MPI_SOURCE << std::endl;
 		if (r_count != count)
 			throw "server: received insufficient grads!";
 		else {
@@ -401,7 +401,7 @@ int fm_model::server_pull() {
 			}
 			
 			// wk_debug
-			dump_grads();
+			//dump_grads();
 		}
 	}
 	else {
@@ -415,17 +415,19 @@ int fm_model::server_learn(double learn_rate) {
 	if (my_rank != MPI_SERVER_NODE)
 		return 0;
 
-	std::cout << "Enter: fm_model::server_learn(" << learn_rate << ")" << std::endl;
+	double divisor = 1.0/(world_size-1);
+	//std::cout << "Enter: fm_model::server_learn(" << learn_rate << ")" << std::endl;
+	//std::cout << "divisor: " << divisor << std::endl;
 
 	if (k0) {
-		w0 -= learn_rate * (w0_grad + reg0 * w0);
+		w0 -= learn_rate * (w0_grad*divisor + reg0 * w0);
 		w0_grad = 0;
 	}
 
 	if (k1) {
 		for (uint i = 0; i < w.dim; i++) {
 			double& ww = w(i);
-			ww -= learn_rate * (w_grad(i) + regw * ww);
+			ww -= learn_rate * (w_grad(i)*divisor + regw * ww);
 		}
 		w_grad.init(0);
 	}
@@ -433,7 +435,7 @@ int fm_model::server_learn(double learn_rate) {
 	for (uint f = 0; f < v.dim1; f++) {
 		for (uint i = 0; i < v.dim2; i++) {
 			double& vv = v(f, i);
-			vv -= learn_rate * (v_grad(f, i) + regv * vv);
+			vv -= learn_rate * (v_grad(f, i)*divisor + regv * vv);
 		}
 	}
 	v_grad.DMatrix<double>::init(0);

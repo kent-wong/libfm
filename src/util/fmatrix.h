@@ -54,6 +54,10 @@ template <typename T> class LargeSparseMatrix {
   virtual void begin() = 0; // go to the beginning
   virtual bool end() = 0;   // are we at the end?
   virtual void next() = 0; // go to the next line
+#ifdef ENABLE_MPI
+  virtual void set(int index) = 0;
+  virtual int cur() = 0;
+#endif
   virtual sparse_row<T>& getRow() = 0; // pointer to the current row
   virtual uint getRowIndex() = 0; // index of current row (starting with 0)
   virtual uint getNumRows() = 0; // get the number of Rows
@@ -77,6 +81,10 @@ template <typename T> class LargeSparseMatrixHD : public LargeSparseMatrix<T> {
   virtual void next();
   virtual void begin();
   virtual bool end();
+#ifdef ENABLE_MPI
+  virtual void set(int index);
+  virtual int cur();
+#endif
 
   virtual sparse_row<T>& getRow();
   virtual uint getRowIndex();
@@ -105,6 +113,10 @@ template <typename T> class LargeSparseMatrixMemory : public LargeSparseMatrix<T
   virtual void begin();
   virtual bool end();
   virtual void next();
+#ifdef ENABLE_MPI
+  virtual void set(int index);
+  virtual int cur();
+#endif
   virtual sparse_row<T>& getRow();
   virtual uint getRowIndex();
   virtual uint getNumRows();
@@ -272,6 +284,15 @@ template <typename T> bool LargeSparseMatrixHD<T>::end() {
   return row_index >= num_rows;
 }
 
+#ifdef ENABLE_MPI
+template <typename T> void LargeSparseMatrixHD<T>::set(int idx) {
+  row_index = idx;
+}
+
+template <typename T> int LargeSparseMatrixHD<T>::cur() {
+  return row_index;
+}
+#endif
 template <typename T> sparse_row<T>& LargeSparseMatrixHD<T>::getRow() {
   return data(position_in_data_cache);
 }
@@ -291,6 +312,16 @@ template <typename T> bool LargeSparseMatrixMemory<T>::end() {
 template <typename T> void LargeSparseMatrixMemory<T>::next() {
   index++;
 }
+
+#ifdef ENABLE_MPI
+template <typename T> void LargeSparseMatrixMemory<T>::set(int idx) {
+  index = idx;
+}
+
+template <typename T> int LargeSparseMatrixMemory<T>::cur() {
+  return index;
+}
+#endif
 
 template <typename T> sparse_row<T>& LargeSparseMatrixMemory<T>::getRow() {
   return data(index);

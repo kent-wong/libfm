@@ -47,17 +47,22 @@ void fm_learn_sgd_element::init() {
 
 void fm_learn_sgd_element::learn(Data& train, Data& test) {
 	// wk_debug
-	std::cout << "*** fm_learn_sgd_element::learn() ***" << std::endl;
-	std::cout << "*** num_iter: " << num_iter << " ***" << std::endl;
+	//std::cout << "*** fm_learn_sgd_element::learn() ***" << std::endl;
+	//std::cout << "*** num_iter: " << num_iter << " ***" << std::endl;
+	//std::cout << "*** num_cases: " << train.num_cases << " ***" << std::endl;
 
   fm_learn_sgd::learn(train, test);
 
 #ifdef ENABLE_MPI
 	if (fm->my_rank == MPI_SERVER_NODE) {
+		double server_time = 0;
+		server_time -= MPI_Wtime();
 		for (int i = 0; i < num_iter; i++) {
-			for (int worker = 1; worker < fm->world_size; worker++)
+			for (int worker = 1; worker < fm->world_size; worker++) {
 				fm->server_pull();
+			}
 
+			// 将ROOT节点的权值同步到所有worker节点
 			fm->server_learn(learn_rate);
 			fm->server_push();
 
@@ -65,16 +70,29 @@ void fm_learn_sgd_element::learn(Data& train, Data& test) {
 			double rmse_test = evaluate(test);
 			std::cout << "Server: #Iter=" << std::setw(3) << i << "\tTrain=" << rmse_train << "\tTest=" << rmse_test << std::endl;
 		}
+
+		server_time += MPI_Wtime();
+		std::cout << "***** Total training time on server: " << server_time << " seconds" << std::endl;
 		return ;
 	}
 #endif
 
   std::cout << "SGD: DON'T FORGET TO SHUFFLE THE ROWS IN TRAINING DATA TO GET THE BEST RESULTS." << std::endl;
   // SGD
+#ifdef ENABLE_MPI
+    if (fm->world_size < 2)
+	    throw "at least 2 process must be spawned!";
+    int train_segment = (int)(train.num_cases / (fm->world_size-1));
+    int start_index = train_segment * (fm->my_rank - 1);
+    int end_index = start_index + train_segment;
+#endif
   for (int i = 0; i < num_iter; i++) {
-
     double iteration_time = getusertime();
+#ifdef ENABLE_MPI
+    for (train.data->set(start_index); train.data->cur() < end_index; train.data->next()) {
+#else
     for (train.data->begin(); !train.data->end(); train.data->next()) {
+#endif
       double p = fm->predict(train.data->getRow(), sum, sum_sqr);
       double mult = 0;
       if (task == 0) {
@@ -102,9 +120,11 @@ void fm_learn_sgd_element::learn(Data& train, Data& test) {
 		fm->worker_push();	
 		fm->worker_pull();
 
+		/*
 		double rmse_train = evaluate(train);
 		double rmse_test = evaluate(test);
 		std::cout << "Client: #Iter=" << std::setw(3) << i << "\tTrain=" << rmse_train << "\tTest=" << rmse_test << std::endl;
+		*/
 	}
 #endif
   }
