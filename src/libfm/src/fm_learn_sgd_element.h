@@ -55,9 +55,9 @@ void fm_learn_sgd_element::learn(Data& train, Data& test) {
 #ifdef ENABLE_MPI
 	if (fm->my_rank == MPI_SERVER_NODE) {
 		for (int i = 0; i < num_iter; i++) {
-			for (int worker = 1; worker < fm->world_size; worker++) {
+			for (int worker = 1; worker < fm->world_size; worker++)
 				fm->server_pull();
-			}
+
 			fm->server_learn(learn_rate);
 			fm->server_push();
 
@@ -87,10 +87,11 @@ void fm_learn_sgd_element::learn(Data& train, Data& test) {
       SGD(train.data->getRow(), mult, sum);
     }
     iteration_time = (getusertime() - iteration_time);
-    double rmse_train = evaluate(train);
+    //double rmse_train = evaluate(train);
     //double rmse_test = evaluate(test);
     //std::cout << "#Iter=" << std::setw(3) << i << "\tTrain=" << rmse_train << "\tTest=" << rmse_test << std::endl;
     if (log != NULL) {
+      double rmse_train = evaluate(train);
       log->log("rmse_train", rmse_train);
       log->log("time_learn", iteration_time);
       log->newLine();
@@ -100,6 +101,10 @@ void fm_learn_sgd_element::learn(Data& train, Data& test) {
 		// worker node
 		fm->worker_push();	
 		fm->worker_pull();
+
+		double rmse_train = evaluate(train);
+		double rmse_test = evaluate(test);
+		std::cout << "Client: #Iter=" << std::setw(3) << i << "\tTrain=" << rmse_train << "\tTest=" << rmse_test << std::endl;
 	}
 #endif
   }

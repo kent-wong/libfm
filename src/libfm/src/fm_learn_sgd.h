@@ -53,6 +53,11 @@ void fm_learn_sgd::init() {
 }
 
 void fm_learn_sgd::learn(Data& train, Data& test) {
+	#ifdef ENABLE_MPI
+	std::cout << "*** fm_learn_sgd::learn() ***" << std::endl;
+	std::cout << "*** num_iter: " << num_iter << ", learn_rate: " << learn_rate << " ***" << std::endl;
+	#endif
+
   fm_learn::learn(train, test);
   std::cout << "learnrate=" << learn_rate << std::endl;
   std::cout << "learnrates=" << learn_rates(0) << "," << learn_rates(1) << "," << learn_rates(2) << std::endl;
